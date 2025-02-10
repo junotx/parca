@@ -138,6 +138,12 @@ proto/generate: proto/vendor
 	# docker run --volume ${PWD}:/workspace --workdir /workspace bufbuild/buf generate
 	buf generate
 
+.PHONY: proto/export
+proto/export: proto/vendor
+	mkdir -p tmp
+	buf export buf.build/googleapis/googleapis -o tmp/
+	buf export buf.build/grpc/grpc -o tmp/
+
 .PHONY: proto/vendor
 proto/vendor: proto/google/pprof/profile.proto
 	cd proto && buf mod update
