@@ -38,11 +38,11 @@ func EncodeOtelLocation(
 		buf[offset] = 0x1
 		offset++
 
-		// buildID := ""
+		buildID := ""
 		// if m.BuildId != 0 {
 		// 	buildID = stringTable[m.BuildId]
 		// }
-		// offset = writeString(buf, offset, buildID)
+		offset = writeString(buf, offset, buildID)
 
 		filename := ""
 		if m.FilenameStrindex != 0 {
@@ -97,11 +97,11 @@ func serializedOtelLocationSize(l *pprofextended.Location, m *pprofextended.Mapp
 	size = addSerializedIntAsUvarintSize(size, len(l.Line))
 
 	if m != nil {
-		// buildID := ""
+		buildID := ""
 		// if m.BuildId != 0 {
 		// 	buildID = stringTable[m.BuildId]
 		// }
-		// size = addSerializedStringSize(size, buildID)
+		size = addSerializedStringSize(size, buildID)
 
 		filename := ""
 		if m.FilenameStrindex != 0 {
