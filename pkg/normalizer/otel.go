@@ -401,7 +401,7 @@ func ValidateOtelProfile(p *otelprofilingpb.Profile) error {
 		}
 
 		for _, l := range s.AttributeIndices {
-			if !existsInStringTable(int64(l), p.StringTable) {
+			if !existsInAttributeTable(int64(l), p.AttributeTable) {
 				return fmt.Errorf("sample attribute index %d out of bounds", l)
 			}
 
@@ -420,6 +420,10 @@ func ValidateOtelProfile(p *otelprofilingpb.Profile) error {
 
 func existsInStringTable(i int64, stringTable []string) bool {
 	return i < int64(len(stringTable)) && i >= 0
+}
+
+func existsInAttributeTable(i int64, attributeTable []*v1.KeyValue) bool {
+	return i < int64(len(attributeTable)) && i >= 0
 }
 
 // serializeOtelStacktrace serializes the stacktrace of an OTLP profile. It
