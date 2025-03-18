@@ -176,7 +176,7 @@ jobs:
         run: |
           # echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u parca-dev --password-stdin ghcr.io
           # echo "${{ secrets.QUAY_PASSWORD }}" | cosign login -u "${{ secrets.QUAY_USERNAME }}" --password-stdin quay.io
-          "${{ secrets.DOCKER_PASSWORD }}" | podman login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin docker.io
+          echo "${{ secrets.DOCKER_PASSWORD }}" | podman login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin docker.io
 
       - name: Push and sign container
         if: ${{ github.event_name != 'pull_request' }}
