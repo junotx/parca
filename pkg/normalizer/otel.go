@@ -462,7 +462,7 @@ func serializeOtelStacktrace(
 	for _, location := range p.LocationTable[s.LocationsStartIndex : s.LocationsStartIndex+s.LocationsLength] {
 		var m *otelprofilingpb.Mapping
 
-		if location.MappingIndex != nil && *location.MappingIndex-1 < int32(len(mappings)) {
+		if location.MappingIndex != nil && *location.MappingIndex > 0 && *location.MappingIndex-1 < int32(len(mappings)) {
 			m = mappings[*location.MappingIndex-1]
 		}
 
