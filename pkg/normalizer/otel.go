@@ -27,9 +27,9 @@ import (
 	"github.com/polarsignals/frostdb/pqarrow"
 	"github.com/polarsignals/frostdb/query/logicalplan"
 	"github.com/prometheus/prometheus/util/strutil"
-	otelgrpcprofilingpb "go.opentelemetry.io/proto/otlp/collector/profiles/v1experimental"
+	otelgrpcprofilingpb "go.opentelemetry.io/proto/otlp/collector/profiles/v1development"
 	v1 "go.opentelemetry.io/proto/otlp/common/v1"
-	otelprofilingpb "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
+	otelprofilingpb "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"golang.org/x/exp/maps"
 
 	"github.com/parca-dev/parca/pkg/profile"
@@ -83,7 +83,7 @@ func (n *labelNames) addOtelAttributes(attrs []*v1.KeyValue) {
 	}
 }
 
-func (n *labelNames) addOtelAttributesFromTable(attrs []*v1.KeyValue, idxs []uint64) {
+func (n *labelNames) addOtelAttributesFromTable(attrs []*v1.KeyValue, idxs []int32) {
 	for _, idx := range idxs {
 		attr := attrs[idx]
 		if strings.TrimSpace(attr.Value.GetStringValue()) != "" {
@@ -92,13 +92,13 @@ func (n *labelNames) addOtelAttributesFromTable(attrs []*v1.KeyValue, idxs []uin
 	}
 }
 
-func (n *labelNames) addOtelPprofExtendedLabels(stringTable []string, labels []*otelprofilingpb.Label) {
-	for _, label := range labels {
-		if label.Str != 0 && strings.TrimSpace(stringTable[label.Str]) != "" {
-			n.addLabel(stringTable[label.Key])
-		}
-	}
-}
+// func (n *labelNames) addOtelPprofExtendedLabels(stringTable []string, labels []*otelprofilingpb.Label) {
+// 	for _, label := range labels {
+// 		if label.Str != 0 && strings.TrimSpace(stringTable[label.Str]) != "" {
+// 			n.addLabel(stringTable[label.Key])
+// 		}
+// 	}
+// }
 
 func (n *labelNames) sorted() []string {
 	if len(n.labelNames) == 0 {
@@ -132,18 +132,18 @@ func (s *labelSet) addOtelAttributes(attrs []*v1.KeyValue) {
 	}
 }
 
-func (s *labelSet) addOtelAttributesFromTable(attrs []*v1.KeyValue, idxs []uint64) {
+func (s *labelSet) addOtelAttributesFromTable(attrs []*v1.KeyValue, idxs []int32) {
 	for _, idx := range idxs {
 		attr := attrs[idx]
 		s.addLabel(attr.Key, attr.Value.GetStringValue())
 	}
 }
 
-func (s *labelSet) addOtelPprofExtendedLabels(stringTable []string, labels []*otelprofilingpb.Label) {
-	for _, label := range labels {
-		s.addLabel(stringTable[label.Key], stringTable[label.Str])
-	}
-}
+// func (s *labelSet) addOtelPprofExtendedLabels(stringTable []string, labels []*otelprofilingpb.Label) {
+// 	for _, label := range labels {
+// 		s.addLabel(stringTable[label.Key], stringTable[label.Str])
+// 	}
+// }
 
 func getAllLabelNames(req *otelgrpcprofilingpb.ExportProfilesServiceRequest) []string {
 	allLabelNames := newLabelNames()
@@ -155,11 +155,11 @@ func getAllLabelNames(req *otelgrpcprofilingpb.ExportProfilesServiceRequest) []s
 			allLabelNames.addOtelAttributes(sp.Scope.Attributes)
 
 			for _, p := range sp.Profiles {
-				allLabelNames.addOtelAttributes(p.Attributes)
+				allLabelNames.addOtelAttributes(p.AttributeTable)
 
-				for _, sample := range p.Profile.Sample {
-					allLabelNames.addOtelPprofExtendedLabels(p.Profile.StringTable, sample.Label)
-					allLabelNames.addOtelAttributesFromTable(p.Profile.AttributeTable, sample.Attributes)
+				for _, sample := range p.Sample {
+					// allLabelNames.addOtelPprofExtendedLabels(p.StringTable, sample.Label)
+					allLabelNames.addOtelAttributesFromTable(p.AttributeTable, sample.AttributeIndices)
 				}
 			}
 		}
@@ -214,11 +214,11 @@ func (w *profileWriter) writeResourceProfiles(
 		for _, sp := range rp.ScopeProfiles {
 			for _, p := range sp.Profiles {
 				metas := []profile.Meta{}
-				for i, st := range p.Profile.SampleType {
-					duration := p.Profile.DurationNanos
-					if duration == 0 {
-						duration = int64(p.EndTimeUnixNano - p.StartTimeUnixNano)
-					}
+				for i, st := range p.SampleType {
+					duration := p.DurationNanos
+					// if duration == 0 {
+					// 	duration = int64(p.EndTimeUnixNano - p.StartTimeUnixNano)
+					// }
 					if duration == 0 && st.AggregationTemporality == otelprofilingpb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA {
 						duration = time.Second.Nanoseconds()
 					}
@@ -227,21 +227,21 @@ func (w *profileWriter) writeResourceProfiles(
 					if name == "" {
 						name = "unknown"
 					}
-					metas = append(metas, MetaFromOtelProfile(p.Profile, name, i, duration))
+					metas = append(metas, MetaFromOtelProfile(p, name, i, duration))
 				}
 
-				for _, sample := range p.Profile.Sample {
+				for _, sample := range p.Sample {
 					ls := newLabelSet()
-					ls.addOtelPprofExtendedLabels(p.Profile.StringTable, sample.Label)
-					ls.addOtelAttributesFromTable(p.Profile.AttributeTable, sample.Attributes)
-					ls.addOtelAttributes(p.Attributes)
+					// ls.addOtelPprofExtendedLabels(p.StringTable, sample.Label)
+					ls.addOtelAttributesFromTable(p.AttributeTable, sample.AttributeIndices)
+					// ls.addOtelAttributes(p.Attributes)
 					ls.addOtelAttributes(sp.Scope.Attributes)
 					ls.addOtelAttributes(rp.Resource.Attributes)
 
 					// It is unclear how to handle the case where there are
 					// multiple sample types with timestamps. Where do the
 					// timestamps start and end for each sample type?
-					if len(sample.TimestampsUnixNano) > 0 && len(p.Profile.SampleType) == 1 {
+					if len(sample.TimestampsUnixNano) > 0 && len(p.SampleType) == 1 {
 						for _, ts := range sample.TimestampsUnixNano {
 							row := SampleToParquetRow(
 								w.schema,
@@ -258,11 +258,11 @@ func (w *profileWriter) writeResourceProfiles(
 								},
 								&NormalizedSample{
 									Locations: serializeOtelStacktrace(
-										p.Profile,
+										p,
 										sample,
-										p.Profile.Function,
-										p.Profile.Mapping,
-										p.Profile.StringTable,
+										p.FunctionTable,
+										p.MappingTable,
+										p.StringTable,
 										true,
 									),
 									Value: 1,
@@ -286,11 +286,11 @@ func (w *profileWriter) writeResourceProfiles(
 								metas[j],
 								&NormalizedSample{
 									Locations: serializeOtelStacktrace(
-										p.Profile,
+										p,
 										sample,
-										p.Profile.Function,
-										p.Profile.Mapping,
-										p.Profile.StringTable,
+										p.FunctionTable,
+										p.MappingTable,
+										p.StringTable,
 										true,
 									),
 									Value: value,
@@ -334,7 +334,7 @@ func ValidateOtelExportProfilesServiceRequest(req *otelgrpcprofilingpb.ExportPro
 	for _, rp := range req.ResourceProfiles {
 		for _, sp := range rp.ScopeProfiles {
 			for _, p := range sp.Profiles {
-				if err := ValidateOtelProfile(p.Profile); err != nil {
+				if err := ValidateOtelProfile(p); err != nil {
 					return fmt.Errorf("invalid profile: %w", err)
 				}
 			}
@@ -345,54 +345,54 @@ func ValidateOtelExportProfilesServiceRequest(req *otelgrpcprofilingpb.ExportPro
 }
 
 func ValidateOtelProfile(p *otelprofilingpb.Profile) error {
-	for _, f := range p.Function {
-		if !existsInStringTable(f.Name, p.StringTable) {
-			return fmt.Errorf("function name index %d out of bounds", f.Name)
+	for _, f := range p.FunctionTable {
+		if !existsInStringTable(int64(f.NameStrindex), p.StringTable) {
+			return fmt.Errorf("function name index %d out of bounds", f.NameStrindex)
 		}
 
-		if !existsInStringTable(f.SystemName, p.StringTable) {
-			return fmt.Errorf("function system name index %d out of bounds", f.SystemName)
+		if !existsInStringTable(int64(f.SystemNameStrindex), p.StringTable) {
+			return fmt.Errorf("function system name index %d out of bounds", f.SystemNameStrindex)
 		}
 
-		if !existsInStringTable(f.Filename, p.StringTable) {
-			return fmt.Errorf("function filename index %d out of bounds", f.Filename)
-		}
-	}
-
-	for _, m := range p.Mapping {
-		if !existsInStringTable(m.Filename, p.StringTable) {
-			return fmt.Errorf("mapping file index %d out of bounds", m.Filename)
-		}
-
-		if !existsInStringTable(m.BuildId, p.StringTable) {
-			return fmt.Errorf("mapping build id index %d out of bounds", m.BuildId)
+		if !existsInStringTable(int64(f.FilenameStrindex), p.StringTable) {
+			return fmt.Errorf("function filename index %d out of bounds", f.FilenameStrindex)
 		}
 	}
 
-	for _, l := range p.Location {
-		if l.MappingIndex > uint64(len(p.Mapping)) {
-			return fmt.Errorf("location mapping index %d out of bounds", l.MappingIndex)
+	for _, m := range p.MappingTable {
+		if !existsInStringTable(int64(m.FilenameStrindex), p.StringTable) {
+			return fmt.Errorf("mapping file index %d out of bounds", m.FilenameStrindex)
+		}
+
+		// if !existsInStringTable(m.BuildId, p.StringTable) {
+		// 	return fmt.Errorf("mapping build id index %d out of bounds", m.BuildId)
+		// }
+	}
+
+	for _, l := range p.LocationTable {
+		if l.MappingIndex != nil && *l.MappingIndex > int32(len(p.MappingTable)) {
+			return fmt.Errorf("location mapping index %d out of bounds", *l.MappingIndex)
 		}
 
 		for _, l := range l.Line {
-			if l.FunctionIndex > uint64(len(p.Function)) {
+			if l.FunctionIndex > int32(len(p.FunctionTable)) {
 				return fmt.Errorf("location line function id %d out of bounds", l.FunctionIndex)
 			}
 		}
 	}
 
 	for _, s := range p.Sample {
-		for _, id := range s.LocationIndex {
-			if id > uint64(len(p.Location)) {
-				return fmt.Errorf("sample location index %d out of bounds", id)
-			}
-		}
+		// for _, id := range s.LocationIndex {
+		// 	if id > uint64(len(p.Location)) {
+		// 		return fmt.Errorf("sample location index %d out of bounds", id)
+		// 	}
+		// }
 
-		if s.LocationsStartIndex > uint64(len(p.Location)) {
+		if s.LocationsStartIndex > int32(len(p.LocationTable)) {
 			return fmt.Errorf("sample locations start index %d out of bounds", s.LocationsStartIndex)
 		}
 
-		if s.LocationsStartIndex+s.LocationsLength > uint64(len(p.Location)) {
+		if s.LocationsStartIndex+s.LocationsLength > int32(len(p.LocationTable)) {
 			return fmt.Errorf("sample locations end index %d out of bounds", s.LocationsStartIndex+s.LocationsLength)
 		}
 
@@ -400,14 +400,14 @@ func ValidateOtelProfile(p *otelprofilingpb.Profile) error {
 			return fmt.Errorf("sample locations start index %d is greater than end index %d", s.LocationsStartIndex, s.LocationsStartIndex+s.LocationsLength)
 		}
 
-		for _, l := range s.Label {
-			if !existsInStringTable(l.Key, p.StringTable) {
-				return fmt.Errorf("sample label key index %d out of bounds", l.Key)
+		for _, l := range s.AttributeIndices {
+			if !existsInStringTable(int64(l), p.StringTable) {
+				return fmt.Errorf("sample attribute index %d out of bounds", l)
 			}
 
-			if !existsInStringTable(l.Str, p.StringTable) {
-				return fmt.Errorf("sample label string index %d out of bounds", l.Str)
-			}
+			// if !existsInStringTable(l.Str, p.StringTable) {
+			// 	return fmt.Errorf("sample label string index %d out of bounds", l.Str)
+			// }
 		}
 
 		if len(s.Value) != len(p.SampleType) {
@@ -434,32 +434,32 @@ func serializeOtelStacktrace(
 	stringTable []string,
 	stabiliziedAddress bool,
 ) [][]byte {
-	st := make([][]byte, 0, len(s.LocationIndex)+int(s.LocationsLength))
+	st := make([][]byte, 0, int(s.LocationsLength))
 
 	// We handle the case where the location IDs are stored in the sample struct.
-	for _, locationID := range s.LocationIndex {
-		location := p.Location[locationID]
-		var m *otelprofilingpb.Mapping
+	// for _, locationID := range s.LocationIndex {
+	// 	location := p.Location[locationID]
+	// 	var m *otelprofilingpb.Mapping
 
-		if location.MappingIndex != 0 && location.MappingIndex-1 < uint64(len(mappings)) {
-			m = mappings[location.MappingIndex-1]
-		}
+	// 	if location.MappingIndex != 0 && location.MappingIndex-1 < uint64(len(mappings)) {
+	// 		m = mappings[location.MappingIndex-1]
+	// 	}
 
-		st = append(st, profile.EncodeOtelLocation(
-			location,
-			m,
-			functions,
-			stringTable,
-		))
-	}
+	// 	st = append(st, profile.EncodeOtelLocation(
+	// 		location,
+	// 		m,
+	// 		functions,
+	// 		stringTable,
+	// 	))
+	// }
 
 	// And the case where the locations are stored in the location slice. And
 	// the sample just points to the start and length.
-	for _, location := range p.Location[s.LocationsStartIndex : s.LocationsStartIndex+s.LocationsLength] {
+	for _, location := range p.LocationTable[s.LocationsStartIndex : s.LocationsStartIndex+s.LocationsLength] {
 		var m *otelprofilingpb.Mapping
 
-		if location.MappingIndex != 0 && location.MappingIndex-1 < uint64(len(mappings)) {
-			m = mappings[location.MappingIndex-1]
+		if location.MappingIndex != nil && *location.MappingIndex-1 < int32(len(mappings)) {
+			m = mappings[*location.MappingIndex-1]
 		}
 
 		st = append(st, profile.EncodeOtelLocation(

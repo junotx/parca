@@ -12,6 +12,7 @@ on:
   merge_group:
     branches:
     - main
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
@@ -150,11 +151,17 @@ jobs:
         shell: bash
         run: echo "GITHUB_BRANCH_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
 
+      - name: Set envs
+        shell: bash
+        run: |
+          echo "OUT_DOCKER=docker.io/${{ secrets.DOCKER_USERNAME }}/parca" >> $GITHUB_ENV
+          echo "VERSION=latest-test" >> $GITHUB_ENV
+
       - name: Build container
         run: make container
 
-      - name: Check images created
-        run: podman images | grep 'ghcr.io/parca-dev/parca'
+      # - name: Check images created
+      #   run: podman images | grep 'ghcr.io/parca-dev/parca'
 
       - name: Install cosign
         if: ${{ github.event_name != 'pull_request' }}
@@ -167,12 +174,13 @@ jobs:
       - name: Login to registry
         if: ${{ github.event_name != 'pull_request' }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u parca-dev --password-stdin ghcr.io
-          echo "${{ secrets.QUAY_PASSWORD }}" | cosign login -u "${{ secrets.QUAY_USERNAME }}" --password-stdin quay.io
+          # echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u parca-dev --password-stdin ghcr.io
+          # echo "${{ secrets.QUAY_PASSWORD }}" | cosign login -u "${{ secrets.QUAY_USERNAME }}" --password-stdin quay.io
+          "${{ secrets.DOCKER_PASSWORD }}" | podman login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin docker.io
 
       - name: Push and sign container
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           make push-container
-          make sign-container
-          make push-signed-quay-container
+          # make sign-container
+          # make push-signed-quay-container
