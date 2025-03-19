@@ -17,18 +17,23 @@ import (
 	"encoding/binary"
 
 	"github.com/apache/arrow/go/v17/arrow/array"
+	"go.opentelemetry.io/otel/attribute"
+	v1 "go.opentelemetry.io/proto/otlp/common/v1"
 	pprofextended "go.opentelemetry.io/proto/otlp/profiles/v1development"
 
 	pprofpb "github.com/parca-dev/parca/gen/proto/go/google/pprof"
 )
+
+const ProcessExecutableBuildIDHtlhashKey = attribute.Key("process.executable.build_id.htlhash")
 
 func EncodeOtelLocation(
 	l *pprofextended.Location,
 	m *pprofextended.Mapping,
 	funcs []*pprofextended.Function,
 	stringTable []string,
+	attributeTable []*v1.KeyValue,
 ) []byte {
-	buf := make([]byte, serializedOtelLocationSize(l, m, funcs, stringTable))
+	buf := make([]byte, serializedOtelLocationSize(l, m, funcs, stringTable, attributeTable))
 	offset := binary.PutUvarint(buf, l.Address)
 	offset = writeIntAsUvarint(buf, offset, len(l.Line))
 	if m == nil {
@@ -39,9 +44,11 @@ func EncodeOtelLocation(
 		offset++
 
 		buildID := ""
-		// if m.BuildId != 0 {
-		// 	buildID = stringTable[m.BuildId]
-		// }
+		for _, kv := range attributeTable {
+			if kv.Key == string(ProcessExecutableBuildIDHtlhashKey) {
+				buildID = kv.Value.GetStringValue()
+			}
+		}
 		offset = writeString(buf, offset, buildID)
 
 		filename := ""
@@ -90,7 +97,7 @@ func EncodeOtelLocation(
 	return buf
 }
 
-func serializedOtelLocationSize(l *pprofextended.Location, m *pprofextended.Mapping, funcs []*pprofextended.Function, stringTable []string) int {
+func serializedOtelLocationSize(l *pprofextended.Location, m *pprofextended.Mapping, funcs []*pprofextended.Function, stringTable []string, attributeTable []*v1.KeyValue) int {
 	size := UvarintSize(l.Address)
 	size++ // 1 byte for whether there is a mapping
 
@@ -98,9 +105,11 @@ func serializedOtelLocationSize(l *pprofextended.Location, m *pprofextended.Mapp
 
 	if m != nil {
 		buildID := ""
-		// if m.BuildId != 0 {
-		// 	buildID = stringTable[m.BuildId]
-		// }
+		for _, kv := range attributeTable {
+			if kv.Key == string(ProcessExecutableBuildIDHtlhashKey) {
+				buildID = kv.Value.String()
+			}
+		}
 		size = addSerializedStringSize(size, buildID)
 
 		filename := ""

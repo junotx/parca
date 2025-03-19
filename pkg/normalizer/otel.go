@@ -471,6 +471,7 @@ func serializeOtelStacktrace(
 			m,
 			functions,
 			stringTable,
+			p.AttributeTable,
 		))
 	}
 
